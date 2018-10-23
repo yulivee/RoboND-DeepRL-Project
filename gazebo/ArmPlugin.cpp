@@ -34,10 +34,10 @@
 
 #define INPUT_WIDTH   64
 #define INPUT_HEIGHT  64
-#define OPTIMIZER "Adam"
+#define OPTIMIZER "RMSprop"
 #define LEARNING_RATE 0.01f
 #define REPLAY_MEMORY 10000
-#define BATCH_SIZE 512
+#define BATCH_SIZE 32
 #define USE_LSTM true
 #define LSTM_SIZE 256
 
@@ -45,6 +45,7 @@
 
 #define REWARD_WIN  1.0f
 #define REWARD_LOSS -1.0f
+#define REWARD_ALPHA 0.2f
 
 // Define Object Names
 #define WORLD_NAME "arm_world"
@@ -253,9 +254,6 @@ void ArmPlugin::onCollisionMsg(ConstContactsPtr &contacts)
     for (unsigned int i = 0; i < contacts->contact_size(); ++i)
     {
 
-        printf("contacts collision1: %s\n: ", contacts->contact(i).collision1().c_str());
-        printf("contacts collision2: %s\n: ", contacts->contact(i).collision2().c_str());
-
         if( strcmp(contacts->contact(i).collision2().c_str(), COLLISION_FILTER) == 0 )
             continue;
 
@@ -265,7 +263,7 @@ void ArmPlugin::onCollisionMsg(ConstContactsPtr &contacts)
         }
 
 
-        // TODO - Check if there is collision between the arm and object, then issue learning reward
+        // TODO - Check if there is collision between the arm and object, then issue learning reward - REWARD
         bool armCollisionCheck = 
             (strcmp(contacts->contact(i).collision2().c_str(), COLLISION_ARM) == 0);
         bool gripperCollisionCheck = 
@@ -278,7 +276,7 @@ void ArmPlugin::onCollisionMsg(ConstContactsPtr &contacts)
         if (gripperCollisionCheck) {
             printf("gripper collision with target");
 
-            rewardHistory = REWARD_WIN * 1000.0f;
+            rewardHistory = REWARD_WIN * 2000.0f;
 
             newReward  = true;
             endEpisode = true;
@@ -557,7 +555,7 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
     {
         printf("[ArmPlugin] %i frames\n, End of Episode", maxEpisodeLength);
         // negative reward to keep arm from avoiding collisions
-        rewardHistory = REWARD_LOSS * 500.0f;
+        rewardHistory = REWARD_LOSS * 1000.0f;
         newReward     = true;
         endEpisode    = true;
     }
@@ -587,7 +585,7 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
         const math::Box& gripBBox = gripper->GetBoundingBox();
         const float groundContact = 0.05f;
 
-        // TODO - set appropriate Reward for robot hitting the ground.
+        // TODO - set appropriate Reward for robot hitting the ground. GROUND REWARD
 
         const float distGoal = BoxDistance(gripBBox, propBBox); //distance to the goal
 
@@ -600,12 +598,12 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
                 printf("GROUND CONTACT, EOE\n");
             }
 
-            rewardHistory = REWARD_LOSS * distGoal * 100.0f;
+            rewardHistory = REWARD_LOSS * distGoal * 1000.0f;
             newReward     = true;
             endEpisode    = true;
         }
 
-        // TODO - Issue an interim reward based on the distance to the object
+        // TODO - Issue an interim reward based on the distance to the object - INTERIM REWARD
 
         if(!checkGroundContact)
         {
@@ -622,7 +620,7 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
 
 
                 // compute the smoothed moving average of the delta of the distance to the goal
-                avgGoalDelta  = (avgGoalDelta * 0.2f) + (distDelta * ( 1.0f - 0.2f ));
+                avgGoalDelta  = (avgGoalDelta * REWARD_ALPHA) + (distDelta * ( 1.0f - REWARD_ALPHA ));
                 rewardHistory = avgGoalDelta;
                 newReward     = true;
             }
