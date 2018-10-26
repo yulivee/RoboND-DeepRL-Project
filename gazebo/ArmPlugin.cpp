@@ -34,8 +34,8 @@
 
 #define INPUT_WIDTH   64
 #define INPUT_HEIGHT  64
-#define OPTIMIZER "RMSprop"
-#define LEARNING_RATE 0.01f
+#define OPTIMIZER "Adam"
+#define LEARNING_RATE 0.1f
 #define REPLAY_MEMORY 10000
 #define BATCH_SIZE 32
 #define USE_LSTM true
@@ -51,12 +51,14 @@
 #define WORLD_NAME "arm_world"
 #define PROP_NAME  "tube"
 #define GRIP_NAME  "gripper_middle"
+#define MID_ARM    "joint2"
 
 // Define Collision Parameters
 #define COLLISION_FILTER "ground_plane::link::collision"
 #define COLLISION_ITEM   "tube::tube_link::tube_collision"
 #define COLLISION_POINT  "arm::gripperbase::gripper_link"
 #define COLLISION_ARM    "arm::link2::collision2"
+#define COLLISION_MID    "arm::joint2::collision"
 
 // Animation Steps
 #define ANIMATION_STEPS 1000
@@ -269,23 +271,21 @@ void ArmPlugin::onCollisionMsg(ConstContactsPtr &contacts)
         bool gripperCollisionCheck = 
             (contacts->contact(i).collision2().find("arm::gripper") != std::string::npos);
 
-        std::cout << "Collision between[" << contacts->contact(i).collision1()
-                  << "] and [" << contacts->contact(i).collision2() << "]\n";
-
 
         if (gripperCollisionCheck) {
-            printf("gripper collision with target");
-
-            rewardHistory = REWARD_WIN * 2000.0f;
-
+            rewardHistory = REWARD_WIN * 2500.0f;
             newReward  = true;
             endEpisode = true;
+            printf("gripper collision with target, rewardHistory:%f\n",rewardHistory);
+
         } else if (armCollisionCheck) {
-            printf("arm collision with target");
-            rewardHistory = REWARD_WIN * 1000.0f;
+            rewardHistory = REWARD_WIN * 2500.0f;
             newReward  = true;
             endEpisode = true;
+
+            printf("arm collision with target, rewardHistory:%f\n",rewardHistory);
         }
+
 
     }
 }
@@ -553,7 +553,7 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
     // episode timeout
     if( maxEpisodeLength > 0 && episodeFrames > maxEpisodeLength )
     {
-        printf("[ArmPlugin] %i frames\n, End of Episode", maxEpisodeLength);
+        printf("[ArmPlugin] %i frames, End of Episode\n", maxEpisodeLength);
         // negative reward to keep arm from avoiding collisions
         rewardHistory = REWARD_LOSS * 1000.0f;
         newReward     = true;
@@ -574,6 +574,7 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
         // get the bounding box for the prop object
         const math::Box& propBBox = prop->model->GetBoundingBox();
         physics::LinkPtr gripper  = model->GetLink(GRIP_NAME);
+        physics::LinkPtr midJoint = model->GetLink(MID_ARM);
 
         if( !gripper )
         {
@@ -583,13 +584,14 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
 
         // get the bounding box for the gripper
         const math::Box& gripBBox = gripper->GetBoundingBox();
-        const float groundContact = 0.05f;
+        const math::Box& midBBox = midJoint->GetBoundingBox();
+        const float groundContact = 0.02f;
 
         // TODO - set appropriate Reward for robot hitting the ground. GROUND REWARD
 
         const float distGoal = BoxDistance(gripBBox, propBBox); //distance to the goal
 
-        bool checkGroundContact = (gripBBox.min.z <= groundContact || gripBBox.max.z <= groundContact);
+        bool checkGroundContact = (gripBBox.min.z <= groundContact || gripBBox.max.z <= groundContact || midBBox.min.z <= groundContact || midBBox.max.z <= groundContact);
 
         if(checkGroundContact)
         {
@@ -597,8 +599,8 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
             if(DEBUG) {
                 printf("GROUND CONTACT, EOE\n");
             }
-
-            rewardHistory = REWARD_LOSS * distGoal * 1000.0f;
+    
+            rewardHistory = REWARD_LOSS * distGoal * 5000.0f;
             newReward     = true;
             endEpisode    = true;
         }
@@ -620,9 +622,11 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
 
 
                 // compute the smoothed moving average of the delta of the distance to the goal
-                avgGoalDelta  = (avgGoalDelta * REWARD_ALPHA) + (distDelta * ( 1.0f - REWARD_ALPHA ));
-                rewardHistory = avgGoalDelta;
+                //avgGoalDelta  = (distDelta * REWARD_ALPHA ) + (distGoal * ( -1.0f - (REWARD_ALPHA) ) );
+                avgGoalDelta  = (-(( distGoal / 2.7 ) - 1 ) + distDelta );
+                rewardHistory = avgGoalDelta * 10;
                 newReward     = true;
+		printf("Interim Reward: rewardHistory %f - distGoal %f - distDelta %f\n", rewardHistory,distGoal,distDelta);
             }
 
             lastGoalDistance = distGoal;
