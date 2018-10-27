@@ -619,27 +619,26 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
 
             if( episodeFrames > 1 )
             {
-                const float distDelta  = lastGoalDistance - distGoal; // (-1...1)
-		const float weightedDelta = distDelta * ( 1.0f - REWARD_ALPHA);
-                const float normalizedGoal = distGoal / 1.8f; // (0...2)
-                const float shiftedGoal = -(distGoal - 1.0f); // (-1...1)
-                const float weightedGoal = shiftedGoal * REWARD_ALPHA;
-		const float weightedHist = avgGoalDelta * REWARD_ALPHA;
+                float interimReward = 0.0f;
+		const float gripMiddle = (gripBBox.min.x + gripBBox.max.x) / 2.0f;
+	//	std::cout << "xMin: " << gripBBox.min.x << " xMax: " << gripBBox.max.x << "yMin: " << gripBBox.min.y << " yMax: " << gripBBox.max.y<< std::endl;
 		
-                //const float goalReward = weightedGoal + weightedDelta + weightedHist;
+		const float distDelta  = lastGoalDistance - distGoal; // (-1...1)		
+		const float weightedDelta = distDelta * ( 1.0f - REWARD_ALPHA);
+		const bool leftZone = gripMiddle < 0.0f;
+
+		if(leftZone)  {
+			//interimReward = shiftedGoal;
+		} else {
+
+		}	
+		const float weightedHist = avgGoalDelta * REWARD_ALPHA;
                 const float goalReward = weightedDelta + weightedHist;
                 const float scaledReward = goalReward * 20.0f;
                 avgGoalDelta = goalReward;
-                // compute the smoothed moving average of the delta of the distance to the goal
-                //avgGoalDelta  = (distDelta * REWARD_ALPHA ) + (distGoal * ( -1.0f - (REWARD_ALPHA) ) );
-                
-                
-                //avgGoalDelta  = (-(( distGoal / 2.7 ) - 1 ) + distDelta );
-                //rewardHistory = avgGoalDelta * 10;
                 rewardHistory = scaledReward;
                 newReward     = true;
-		//printf("Interim Reward: rewardHistory %f - distGoal %f - distDelta %f\n", rewardHistory,distGoal,distDelta);
-                std::cerr << "reward: " << scaledReward << " shiftedGoal: " << shiftedGoal <<  " delta: " << distDelta << " wG " << weightedGoal << " wD " <<  weightedDelta << " wH " << weightedHist << std::endl;          
+                std::cerr << "reward: " << scaledReward << " delta: " << distDelta << " wD " <<  weightedDelta << " wH " << weightedHist << std::endl;          
             }
 
                 totalrewards = totalrewards + rewardHistory;
