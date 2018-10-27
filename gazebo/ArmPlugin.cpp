@@ -35,7 +35,7 @@
 #define INPUT_WIDTH   64
 #define INPUT_HEIGHT  64
 #define OPTIMIZER "Adam"
-#define LEARNING_RATE 0.01f
+#define LEARNING_RATE 0.02f
 #define REPLAY_MEMORY 10000
 #define BATCH_SIZE 32
 #define USE_LSTM true
@@ -45,7 +45,7 @@
 
 #define REWARD_WIN  1.0f
 #define REWARD_LOSS -1.0f
-#define REWARD_ALPHA 0.7f
+#define REWARD_ALPHA 0.2f
 
 // Define Object Names
 #define WORLD_NAME "arm_world"
@@ -114,6 +114,7 @@ ArmPlugin::ArmPlugin() : ModelPlugin(), cameraNode(new gazebo::transport::Node()
     animationStep    = 0;
     lastGoalDistance = 0.0f;
     avgGoalDelta     = 0.0f;
+    totalrewards     = 0.0f;
     successfulGrabs = 0;
     totalRuns       = 0;
 }
@@ -273,13 +274,13 @@ void ArmPlugin::onCollisionMsg(ConstContactsPtr &contacts)
 
 
         if (gripperCollisionCheck) {
-            rewardHistory = REWARD_WIN * 2500.0f;
+            rewardHistory = REWARD_WIN * 3000.0f;
             newReward  = true;
             endEpisode = true;
             printf("gripper collision with target, rewardHistory:%f\n",rewardHistory);
 
         } else if (armCollisionCheck) {
-            rewardHistory = REWARD_WIN * 2500.0f;
+            rewardHistory = REWARD_WIN * 3000.0f;
             newReward  = true;
             endEpisode = true;
 
@@ -555,7 +556,7 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
     {
         printf("[ArmPlugin] %i frames, End of Episode\n", maxEpisodeLength);
         // negative reward to keep arm from avoiding collisions
-        rewardHistory = REWARD_LOSS * 1000.0f;
+        rewardHistory = REWARD_LOSS * 3000.0f;
         newReward     = true;
         endEpisode    = true;
     }
@@ -620,13 +621,14 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
             {
                 const float distDelta  = lastGoalDistance - distGoal; // (-1...1)
 		const float weightedDelta = distDelta * ( 1.0f - REWARD_ALPHA);
-                const float normalizedGoal = distGoal / 2.7f; // (0...2)
-                const float shiftedGoal = distGoal - 1.0f; // (-1...1)
+                const float normalizedGoal = distGoal / 1.8f; // (0...2)
+                const float shiftedGoal = -(distGoal - 1.0f); // (-1...1)
                 const float weightedGoal = shiftedGoal * REWARD_ALPHA;
 		const float weightedHist = avgGoalDelta * REWARD_ALPHA;
 		
-                const float goalReward = (-weightedGoal) + weightedDelta + weightedHist;
-                const float scaledReward = goalReward * 100.0f;
+                //const float goalReward = weightedGoal + weightedDelta + weightedHist;
+                const float goalReward = weightedDelta + weightedHist;
+                const float scaledReward = goalReward * 20.0f;
                 avgGoalDelta = goalReward;
                 // compute the smoothed moving average of the delta of the distance to the goal
                 //avgGoalDelta  = (distDelta * REWARD_ALPHA ) + (distGoal * ( -1.0f - (REWARD_ALPHA) ) );
@@ -637,8 +639,10 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
                 rewardHistory = scaledReward;
                 newReward     = true;
 		//printf("Interim Reward: rewardHistory %f - distGoal %f - distDelta %f\n", rewardHistory,distGoal,distDelta);
-                std::cerr << "reward: " << scaledReward << " shiftedGoal: " << shiftedGoal <<  " delta: " << distDelta << " wG " << weightedGoal << " wD " <<  weightedDelta << " wH " << weightedHist << std::endl;          }
+                std::cerr << "reward: " << scaledReward << " shiftedGoal: " << shiftedGoal <<  " delta: " << distDelta << " wG " << weightedGoal << " wD " <<  weightedDelta << " wH " << weightedHist << std::endl;          
+            }
 
+                totalrewards = totalrewards + rewardHistory;
             lastGoalDistance = distGoal;
         }
     }
@@ -673,13 +677,15 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
                 successfulGrabs++;
 
             totalRuns++;
-            printf("Current Accuracy:  %0.4f (%03u of %03u)  (reward=%+0.2f %s)\n",
+            printf("Current Accuracy:  %0.4f (%03u of %03u)  (reward=%+0.2f %s, accumulatedReward=%+0.2f)\n",
                     float(successfulGrabs)/float(totalRuns),
                     successfulGrabs,
                     totalRuns,
                     rewardHistory,
-                    (rewardHistory >= 0.0f ? "WIN" : "LOSS"));
+                    (rewardHistory >= 0.0f ? "WIN" : "LOSS"),
+	            totalrewards);
 
+	    totalrewards     = 0.0f;
 /*            printf("Total: %f, gripperColl: %0.4f, armColl: %0.4f, floorColl: %0.4f, noColl: %04f\n",
                     float((successfulGrabs + nArmTargetCollision + nfloorCollision + nNoCollision) / totalRuns),
                     float(successfulGrabs)/float(totalRuns),
@@ -692,6 +698,7 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
         }
         rewardHistory = 0.0f;
     }
-}
 
+
+}
 }
