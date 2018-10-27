@@ -17,8 +17,8 @@
 
 // Turn on velocity based control
 #define VELOCITY_CONTROL true
-#define VELOCITY_MIN -0.2f
-#define VELOCITY_MAX  0.2f
+#define VELOCITY_MIN -0.1f
+#define VELOCITY_MAX  0.1f
 
 // Define DQN API Settings
 
@@ -35,7 +35,7 @@
 #define INPUT_WIDTH   64
 #define INPUT_HEIGHT  64
 #define OPTIMIZER "Adam"
-#define LEARNING_RATE 0.1f
+#define LEARNING_RATE 0.01f
 #define REPLAY_MEMORY 10000
 #define BATCH_SIZE 32
 #define USE_LSTM true
@@ -45,7 +45,7 @@
 
 #define REWARD_WIN  1.0f
 #define REWARD_LOSS -1.0f
-#define REWARD_ALPHA 0.2f
+#define REWARD_ALPHA 0.7f
 
 // Define Object Names
 #define WORLD_NAME "arm_world"
@@ -250,7 +250,7 @@ void ArmPlugin::onCollisionMsg(ConstContactsPtr &contacts)
         printf("collision callback (%u contacts)\n", contacts->contact_size());
     }
 
-    if( testAnimation )
+    if( testAnimation || endEpisode )
         return;
 
     for (unsigned int i = 0; i < contacts->contact_size(); ++i)
@@ -585,7 +585,7 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
         // get the bounding box for the gripper
         const math::Box& gripBBox = gripper->GetBoundingBox();
         const math::Box& midBBox = midJoint->GetBoundingBox();
-        const float groundContact = 0.02f;
+        const float groundContact = 0.005f;
 
         // TODO - set appropriate Reward for robot hitting the ground. GROUND REWARD
 
@@ -618,16 +618,26 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
 
             if( episodeFrames > 1 )
             {
-                const float distDelta  = lastGoalDistance - distGoal;
-
-
+                const float distDelta  = lastGoalDistance - distGoal; // (-1...1)
+		const float weightedDelta = distDelta * ( 1.0f - REWARD_ALPHA);
+                const float normalizedGoal = distGoal / 2.7f; // (0...2)
+                const float shiftedGoal = distGoal - 1.0f; // (-1...1)
+                const float weightedGoal = shiftedGoal * REWARD_ALPHA;
+		const float weightedHist = avgGoalDelta * REWARD_ALPHA;
+		
+                const float goalReward = (-weightedGoal) + weightedDelta + weightedHist;
+                const float scaledReward = goalReward * 100.0f;
+                avgGoalDelta = goalReward;
                 // compute the smoothed moving average of the delta of the distance to the goal
                 //avgGoalDelta  = (distDelta * REWARD_ALPHA ) + (distGoal * ( -1.0f - (REWARD_ALPHA) ) );
-                avgGoalDelta  = (-(( distGoal / 2.7 ) - 1 ) + distDelta );
-                rewardHistory = avgGoalDelta * 10;
+                
+                
+                //avgGoalDelta  = (-(( distGoal / 2.7 ) - 1 ) + distDelta );
+                //rewardHistory = avgGoalDelta * 10;
+                rewardHistory = scaledReward;
                 newReward     = true;
-		printf("Interim Reward: rewardHistory %f - distGoal %f - distDelta %f\n", rewardHistory,distGoal,distDelta);
-            }
+		//printf("Interim Reward: rewardHistory %f - distGoal %f - distDelta %f\n", rewardHistory,distGoal,distDelta);
+                std::cerr << "reward: " << scaledReward << " shiftedGoal: " << shiftedGoal <<  " delta: " << distDelta << " wG " << weightedGoal << " wD " <<  weightedDelta << " wH " << weightedHist << std::endl;          }
 
             lastGoalDistance = distGoal;
         }
@@ -668,7 +678,7 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
                     successfulGrabs,
                     totalRuns,
                     rewardHistory,
-                    (rewardHistory >= REWARD_WIN ? "WIN" : "LOSS"));
+                    (rewardHistory >= 0.0f ? "WIN" : "LOSS"));
 
 /*            printf("Total: %f, gripperColl: %0.4f, armColl: %0.4f, floorColl: %0.4f, noColl: %04f\n",
                     float((successfulGrabs + nArmTargetCollision + nfloorCollision + nNoCollision) / totalRuns),
