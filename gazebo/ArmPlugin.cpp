@@ -28,7 +28,7 @@
 #define GAMMA 0.9f
 #define EPS_START 0.9f
 #define EPS_END 0.05f
-#define EPS_DECAY 200
+#define EPS_DECAY 100
 
 // TODO - Tune the following hyperparameters
 
@@ -37,7 +37,7 @@
 #define OPTIMIZER "Adam"
 #define LEARNING_RATE 0.02f
 #define REPLAY_MEMORY 10000
-#define BATCH_SIZE 32
+#define BATCH_SIZE 64
 #define USE_LSTM true
 #define LSTM_SIZE 256
 
@@ -592,7 +592,8 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
 
         const float distGoal = BoxDistance(gripBBox, propBBox); //distance to the goal
 
-        bool checkGroundContact = (gripBBox.min.z <= groundContact || gripBBox.max.z <= groundContact || midBBox.min.z <= groundContact || midBBox.max.z <= groundContact);
+        bool checkGroundContact = ( gripBBox.min.z <= groundContact || gripBBox.max.z <= groundContact );
+        bool checkGroundContactArm = ( midBBox.min.z <= groundContact || midBBox.max.z <= groundContact );
 
         if(checkGroundContact)
         {
@@ -606,9 +607,16 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
             endEpisode    = true;
         }
 
+	if (checkGroundContactArm)
+        {
+            rewardHistory = REWARD_LOSS * 5000.0f;
+            newReward     = true;
+            endEpisode    = true;
+        }
+
         // TODO - Issue an interim reward based on the distance to the object - INTERIM REWARD
 
-        if(!checkGroundContact)
+        if(!checkGroundContact && !checkGroundContactArm)
         {
 
             if(DEBUG) {
@@ -619,22 +627,12 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
 
             if( episodeFrames > 1 )
             {
-                float interimReward = 0.0f;
-		const float gripMiddle = (gripBBox.min.x + gripBBox.max.x) / 2.0f;
-	//	std::cout << "xMin: " << gripBBox.min.x << " xMax: " << gripBBox.max.x << "yMin: " << gripBBox.min.y << " yMax: " << gripBBox.max.y<< std::endl;
-		
 		const float distDelta  = lastGoalDistance - distGoal; // (-1...1)		
 		const float weightedDelta = distDelta * ( 1.0f - REWARD_ALPHA);
-		const bool leftZone = gripMiddle < 0.0f;
 
-		if(leftZone)  {
-			//interimReward = shiftedGoal;
-		} else {
-
-		}	
 		const float weightedHist = avgGoalDelta * REWARD_ALPHA;
                 const float goalReward = weightedDelta + weightedHist;
-                const float scaledReward = goalReward * 20.0f;
+                const float scaledReward = goalReward * 25.0f;
                 avgGoalDelta = goalReward;
                 rewardHistory = scaledReward;
                 newReward     = true;
