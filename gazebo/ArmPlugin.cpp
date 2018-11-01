@@ -16,7 +16,7 @@
 #define JOINT_MAX	 2.0f
 
 // Turn on velocity based control
-#define VELOCITY_CONTROL true
+#define VELOCITY_CONTROL false
 #define VELOCITY_MIN -0.1f
 #define VELOCITY_MAX  0.1f
 
@@ -277,14 +277,12 @@ void ArmPlugin::onCollisionMsg(ConstContactsPtr &contacts)
             rewardHistory = REWARD_WIN * 3000.0f;
             newReward  = true;
             endEpisode = true;
-            printf("gripper collision with target, rewardHistory:%f\n",rewardHistory);
 
         } else if (armCollisionCheck) {
-            rewardHistory = REWARD_WIN * 3000.0f;
+            rewardHistory = REWARD_LOSS * 2000.0f;
             newReward  = true;
             endEpisode = true;
 
-            printf("arm collision with target, rewardHistory:%f\n",rewardHistory);
         }
 
 
@@ -556,7 +554,7 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
     {
         printf("[ArmPlugin] %i frames, End of Episode\n", maxEpisodeLength);
         // negative reward to keep arm from avoiding collisions
-        rewardHistory = REWARD_LOSS * 3000.0f;
+        rewardHistory = REWARD_LOSS * 2000.0f;
         newReward     = true;
         endEpisode    = true;
     }
@@ -602,14 +600,14 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
                 printf("GROUND CONTACT, EOE\n");
             }
     
-            rewardHistory = REWARD_LOSS * distGoal * 5000.0f;
+            rewardHistory = REWARD_LOSS * distGoal * 2000.0f;
             newReward     = true;
             endEpisode    = true;
         }
 
 	if (checkGroundContactArm)
         {
-            rewardHistory = REWARD_LOSS * 5000.0f;
+            rewardHistory = REWARD_LOSS * 2000.0f;
             newReward     = true;
             endEpisode    = true;
         }
@@ -632,7 +630,7 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
 
 		const float weightedHist = avgGoalDelta * REWARD_ALPHA;
                 const float goalReward = weightedDelta + weightedHist;
-                const float scaledReward = goalReward * 25.0f;
+                const float scaledReward = goalReward; //* 20.0f;
                 avgGoalDelta = goalReward;
                 rewardHistory = scaledReward;
                 newReward     = true;
@@ -674,7 +672,7 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
                 successfulGrabs++;
 
             totalRuns++;
-            printf("Current Accuracy:  %0.4f (%03u of %03u)  (reward=%+0.2f %s, accumulatedReward=%+0.2f)\n",
+            printf("Current Accuracy:  %0.4f (%03u of %03u)  (reward=%+0.2f %s, AccumulatedReward=%+0.2f)\n",
                     float(successfulGrabs)/float(totalRuns),
                     successfulGrabs,
                     totalRuns,
@@ -683,13 +681,6 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
 	            totalrewards);
 
 	    totalrewards     = 0.0f;
-/*            printf("Total: %f, gripperColl: %0.4f, armColl: %0.4f, floorColl: %0.4f, noColl: %04f\n",
-                    float((successfulGrabs + nArmTargetCollision + nfloorCollision + nNoCollision) / totalRuns),
-                    float(successfulGrabs)/float(totalRuns),
-                    float(nArmTargetCollision)/float(totalRuns),
-                    float(nfloorCollision)/float(totalRuns),
-                    float(nNoCollision)/float(totalRuns));
-*/
             for( uint32_t n=0; n < DOF; n++ )
                 vel[n] = 0.0f;
         }
